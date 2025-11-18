@@ -74,7 +74,10 @@
             WAITING: 'waiting',
             ROLE_REVEAL: 'role_reveal', // 5초
             NIGHT_INTRO: 'night_intro', // 3초
-            NIGHT_ACT: 'night_act',     // 15초 (능력 사용)
+            // NIGHT_ACT 제거하고 세분화
+            NIGHT_MAFIA: 'night_mafia',   // 10초
+            NIGHT_POLICE: 'night_police', // 10초
+            NIGHT_DOCTOR: 'night_doctor', // 10초
             DAY_INTRO: 'day_intro',     // 10초 (밤 결과 발표)
             DAY_VOTE: 'day_vote',       // 3분 (토론 및 투표 통합)
             DAY_RESULT: 'day_result',   // 10초 (투표 결과 및 처형)
@@ -443,8 +446,11 @@
 
             const me = room.players.find(p => p.uid === user.uid) || {};
             
+            // UI Helpers
+            const isNight = room.gameState.phase.startsWith('night_') || room.gameState.phase === PHASES.NIGHT_INTRO;
+            
             return (
-                <div className={`flex flex-col h-screen ${room.gameState.phase.startsWith('night') ? 'bg-black text-gray-300' : 'bg-gray-900 text-white'} transition-colors duration-1000`}>
+                <div className={`flex flex-col h-screen ${isNight ? 'bg-black text-gray-300' : 'bg-gray-900 text-white'} transition-colors duration-1000`}>
                     {/* Game Header */}
                     <div className="p-3 border-b border-gray-700 flex justify-between items-center bg-opacity-50 bg-gray-800">
                         <div className="flex items-center gap-4">
@@ -458,8 +464,19 @@
                         <div className="flex flex-col items-center">
                              {room.gameState.phase === PHASES.WAITING ? <span className="text-green-400">대기 중</span> : 
                               <div className="text-center">
-                                  <span className="font-mono text-xl text-yellow-400">{room.gameState.dayCount}일차 {room.gameState.phase.startsWith('night') ? '🌙 밤' : '☀️ 낮'}</span>
-                                  {room.gameState.phase === PHASES.DAY_VOTE && <div className="text-red-500 font-bold text-2xl animate-pulse">{Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</div>}
+                                  <span className="font-mono text-xl text-yellow-400">
+                                    {room.gameState.dayCount}일차 {isNight ? '🌙 밤' : '☀️ 낮'}
+                                  </span>
+                                  {/* Timer Display for Night Phases or Day Vote */}
+                                  {(room.gameState.phase.startsWith('night_') || room.gameState.phase === PHASES.DAY_VOTE) && (
+                                      <div className="text-red-500 font-bold text-2xl animate-pulse">
+                                        {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                                      </div>
+                                  )}
+                                  {/* Specific Phase Text */}
+                                  {room.gameState.phase === PHASES.NIGHT_MAFIA && <span className="block text-sm text-red-500">마피아 턴</span>}
+                                  {room.gameState.phase === PHASES.NIGHT_POLICE && <span className="block text-sm text-blue-500">경찰 턴</span>}
+                                  {room.gameState.phase === PHASES.NIGHT_DOCTOR && <span className="block text-sm text-green-500">의사 턴</span>}
                               </div>
                              }
                         </div>
@@ -508,7 +525,7 @@
                             ))}
                             <div ref={chatEndRef}></div>
                         </div>
-                        {me.isAlive && !room.gameState.phase.startsWith('night') && (
+                        {me.isAlive && !isNight && (
                             <form onSubmit={sendChat} className="p-2 bg-gray-900 flex gap-2">
                                 <input 
                                     className="flex-1 bg-gray-800 text-white p-2 rounded outline-none focus:ring-1 focus:ring-red-500"
@@ -519,6 +536,7 @@
                                 <button type="submit" className="bg-gray-700 px-4 py-2 rounded hover:bg-gray-600"><i className="ph ph-paper-plane-right"></i></button>
                             </form>
                         )}
+                        {isNight && <div className="p-3 text-center text-gray-600">밤에는 채팅을 할 수 없습니다.</div>}
                     </div>
                 </div>
             );
@@ -534,11 +552,20 @@
 
             const handleClick = () => {
                 if(isDead || isMe || !me.isAlive) return;
-                if(room.gameState.phase === PHASES.DAY_VOTE) {
+                
+                const phase = room.gameState.phase;
+                
+                if(phase === PHASES.DAY_VOTE) {
                     if(hasVoted) { alert("이미 투표하셨습니다."); return; }
                     setShowVoteBtn(!showVoteBtn);
-                } else if (room.gameState.phase === PHASES.NIGHT_ACT) {
-                     handleNightAction();
+                } 
+                // Night Action Logic: Only allow click if role matches phase
+                else if (phase === PHASES.NIGHT_MAFIA && me.role === ROLES.MAFIA) {
+                    handleNightAction('mafia');
+                } else if (phase === PHASES.NIGHT_POLICE && me.role === ROLES.POLICE) {
+                    handleNightAction('police');
+                } else if (phase === PHASES.NIGHT_DOCTOR && me.role === ROLES.DOCTOR) {
+                    handleNightAction('doctor');
                 }
             };
 
@@ -552,24 +579,32 @@
                 setShowVoteBtn(false);
             };
 
-            const handleNightAction = async () => {
-                 // Night Actions
-                 if (me.role === ROLES.MAFIA) {
+            const handleNightAction = async (type) => {
+                 if(!confirm(`${player.nickname}님을 선택하시겠습니까?`)) return;
+                 
+                 if (type === 'mafia') {
                     await updateDoc(doc(db, 'rooms', roomId), { [`gameState.voteList.mafia.${player.uid}`]: increment(1) });
-                    alert(`${player.nickname}님을 선택했습니다.`);
-                } else if (me.role === ROLES.DOCTOR) {
-                    await updateDoc(doc(db, 'rooms', roomId), { [`gameState.voteList.doctor.${player.uid}`]: increment(1) });
-                    alert(`${player.nickname}님을 치료 대상으로 선택했습니다.`);
-                } else if (me.role === ROLES.POLICE) {
+                    alert(`${player.nickname}님을 처형 대상으로 선택했습니다.`);
+                } else if (type === 'police') {
                     await updateDoc(doc(db, 'rooms', roomId), { [`gameState.voteList.police.${player.uid}`]: increment(1) });
                     alert(`${player.nickname}님을 조사합니다.`);
+                } else if (type === 'doctor') {
+                    await updateDoc(doc(db, 'rooms', roomId), { [`gameState.voteList.doctor.${player.uid}`]: increment(1) });
+                    alert(`${player.nickname}님을 치료합니다.`);
                 }
             };
+
+            // Visual Feedback for Night Phases
+            let canAct = false;
+            if (room.gameState.phase === PHASES.NIGHT_MAFIA && me.role === ROLES.MAFIA) canAct = true;
+            if (room.gameState.phase === PHASES.NIGHT_POLICE && me.role === ROLES.POLICE) canAct = true;
+            if (room.gameState.phase === PHASES.NIGHT_DOCTOR && me.role === ROLES.DOCTOR) canAct = true;
 
             return (
                 <div onClick={handleClick} className={`
                     relative p-4 rounded-lg border-2 flex flex-col items-center gap-2 cursor-pointer transition transform hover:scale-105
-                    ${isDead ? 'border-gray-800 opacity-50 grayscale' : 'border-gray-600 bg-gray-800 hover:border-red-500'}
+                    ${isDead ? 'border-gray-800 opacity-50 grayscale' : 'border-gray-600 bg-gray-800'}
+                    ${canAct && !isDead && !isMe ? 'border-red-500 ring-2 ring-red-500 animate-pulse' : ''}
                     ${isMe ? 'ring-2 ring-blue-500' : ''}
                 `}>
                     {isDead && <i className="ph ph-skull text-4xl text-gray-500 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10"></i>}
@@ -649,7 +684,13 @@
         // 9. Notification & Phase Overlay
         function GameNotification({ phase, logs, lastExecuted }) {
             if (phase === PHASES.ROLE_REVEAL) return <OverlayMsg text="직업이 배정되었습니다." sub="당신의 역할을 확인하세요." />;
-            if (phase === PHASES.NIGHT_INTRO) return <OverlayMsg text="밤이 되었습니다." sub="마피아는 고개를 들어주세요..." />;
+            if (phase === PHASES.NIGHT_INTRO) return <OverlayMsg text="밤이 되었습니다." sub="곧 직업 활동이 시작됩니다..." />;
+            
+            // Night Phase Notifications
+            if (phase === PHASES.NIGHT_MAFIA) return null; // UI shows timer
+            if (phase === PHASES.NIGHT_POLICE) return null;
+            if (phase === PHASES.NIGHT_DOCTOR) return null;
+
             if (phase === PHASES.DAY_INTRO) {
                 const lastLog = logs[logs.length - 1] || {};
                 return (
@@ -714,14 +755,33 @@
                         updates = { 'gameState.phase': PHASES.NIGHT_INTRO, 'gameState.phaseEndTime': now + 3000 };
                     } 
                     else if (gs.phase === PHASES.NIGHT_INTRO && now >= gs.phaseEndTime) {
-                        updates = { 'gameState.phase': PHASES.NIGHT_ACT, 'gameState.phaseEndTime': now + 15000, 'gameState.voteList': { mafia: {}, doctor: {}, police: {} } };
+                        // Start Mafia Phase (10s) - Init votes
+                        updates = { 
+                            'gameState.phase': PHASES.NIGHT_MAFIA, 
+                            'gameState.phaseEndTime': now + 10000,
+                            'gameState.voteList': { mafia: {}, doctor: {}, police: {} } // Clear old votes
+                        };
                     } 
-                    else if (gs.phase === PHASES.NIGHT_ACT && now >= gs.phaseEndTime) {
-                        // Night Result Calculation (Same as before)
+                    else if (gs.phase === PHASES.NIGHT_MAFIA && now >= gs.phaseEndTime) {
+                        // Move to Police Phase (10s)
+                        updates = { 
+                            'gameState.phase': PHASES.NIGHT_POLICE, 
+                            'gameState.phaseEndTime': now + 10000 
+                        };
+                    }
+                    else if (gs.phase === PHASES.NIGHT_POLICE && now >= gs.phaseEndTime) {
+                        // Move to Doctor Phase (10s)
+                        updates = { 
+                            'gameState.phase': PHASES.NIGHT_DOCTOR, 
+                            'gameState.phaseEndTime': now + 10000 
+                        };
+                    }
+                    else if (gs.phase === PHASES.NIGHT_DOCTOR && now >= gs.phaseEndTime) {
+                        // Night Result Calculation (After all 3 roles acted)
                         const votes = gs.voteList || {};
                         const mafiaTarget = getWinner(votes.mafia || {}, room.players.filter(p=>p.isAlive && p.role !== ROLES.MAFIA));
                         const doctorTarget = getWinner(votes.doctor || {}, room.players.filter(p=>p.isAlive));
-                        const policeTarget = getWinner(votes.police || {}, room.players.filter(p=>p.isAlive)); // Police logic simplified
+                        const policeTarget = getWinner(votes.police || {}, room.players.filter(p=>p.isAlive)); 
                         
                         // Doctor Constraint
                         let finalDoctorTarget = doctorTarget;
