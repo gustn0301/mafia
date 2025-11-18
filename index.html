@@ -25,6 +25,8 @@
         body { font-family: 'Noto Sans KR', sans-serif; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .animate-fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden">
@@ -72,11 +74,10 @@
             WAITING: 'waiting',
             ROLE_REVEAL: 'role_reveal', // 5초
             NIGHT_INTRO: 'night_intro', // 3초
-            NIGHT_ACT: 'night_act',     // 10초 (능력 사용)
+            NIGHT_ACT: 'night_act',     // 15초 (능력 사용)
             DAY_INTRO: 'day_intro',     // 10초 (밤 결과 발표)
-            DAY_DISCUSS: 'day_discuss', // 180초 (3분)
-            DAY_VOTE: 'day_vote',       // 투표 진행
-            DAY_RESULT: 'day_result',   // 투표 결과 및 처형
+            DAY_VOTE: 'day_vote',       // 3분 (토론 및 투표 통합)
+            DAY_RESULT: 'day_result',   // 10초 (투표 결과 및 처형)
             GAME_OVER: 'game_over'
         };
 
@@ -199,7 +200,7 @@
             const [showProfile, setShowProfile] = useState(false);
 
             useEffect(() => {
-                const q = query(collection(db, 'rooms')); // 실제로는 정렬/필터 필요
+                const q = query(collection(db, 'rooms')); 
                 const unsub = onSnapshot(q, (snap) => {
                     setRooms(snap.docs.map(d => ({id: d.id, ...d.data()})));
                 });
@@ -342,9 +343,18 @@
             const [chatMsg, setChatMsg] = useState('');
             const [chatLogs, setChatLogs] = useState([]);
             const chatEndRef = useRef(null);
-            
-            // Fix: Use ref to track if user has successfully joined to prevent false kick detection
             const hasJoinedRef = useRef(false);
+
+            // Timer Logic (UI Only)
+            const [timeLeft, setTimeLeft] = useState(0);
+            useEffect(() => {
+                if(!room?.gameState?.phaseEndTime) return;
+                const interval = setInterval(() => {
+                    const diff = Math.max(0, Math.ceil((room.gameState.phaseEndTime - Date.now()) / 1000));
+                    setTimeLeft(diff);
+                }, 1000);
+                return () => clearInterval(interval);
+            }, [room?.gameState?.phaseEndTime]);
 
             // Room Sync
             useEffect(() => {
@@ -353,17 +363,10 @@
                     const data = docSnap.data();
                     
                     const me = data.players.find(p => p.uid === user.uid);
-                    
-                    // Mark as joined if found
-                    if (me) {
-                        hasJoinedRef.current = true;
-                    }
+                    if (me) hasJoinedRef.current = true;
 
-                    // Check if I am kicked (Only if I was previously joined)
                     if (hasJoinedRef.current && !me && data.status === 'waiting') { 
-                        alert("강퇴당했습니다."); 
-                        onLeave(); 
-                        return; 
+                        alert("강퇴당했습니다."); onLeave(); return; 
                     }
                     setRoom(data);
                 });
@@ -372,7 +375,7 @@
 
             // Chat Sync
             useEffect(() => {
-                const q = query(collection(db, 'rooms', roomId, 'messages'), where('timestamp', '!=', null)); // Simple ordering handled by firebase auto or client sort
+                const q = query(collection(db, 'rooms', roomId, 'messages'), where('timestamp', '!=', null)); 
                 const unsub = onSnapshot(collection(db, 'rooms', roomId, 'messages'), (snap) => {
                     const msgs = snap.docs.map(d => d.data()).sort((a,b) => a.timestamp - b.timestamp);
                     setChatLogs(msgs);
@@ -399,13 +402,7 @@
                     });
                 };
                 join();
-
-                return () => {
-                    // Leave logic handled carefully to reassign host
-                    // *Note: In a real app, utilize 'onDisconnect' or reliable server triggers. 
-                    // Here we rely on client cleanup.
-                    leaveRoom();
-                };
+                return () => leaveRoom();
             }, []);
 
             const leaveRoom = async () => {
@@ -418,7 +415,7 @@
                 let updates = { players: newPlayers };
 
                 if (newPlayers.length === 0) {
-                    await deleteDoc(roomRef); // Empty room
+                    await deleteDoc(roomRef); 
                 } else {
                     if (data.hostId === user.uid) {
                         updates.hostId = newPlayers[0].uid;
@@ -431,20 +428,13 @@
             const sendChat = async (e) => {
                 e.preventDefault();
                 if (!chatMsg.trim()) return;
-                // 밤이고 죽지 않았으면 채팅 금지 (죽은 사람은 채팅 가능? 보통 마피아 게임에서 죽은사람은 관전 채팅만 가능하고 산사람에게 안보여야함. 
-                // 조건: "죽은 사람은 채팅을 칠 수 없고... 구경만" -> 채팅 입력 막기
                 const me = room.players.find(p => p.uid === user.uid);
                 if (!me.isAlive) { alert("죽은 자는 말이 없습니다."); setChatMsg(''); return; }
                 if (room.gameState.phase.startsWith('night_') || room.gameState.phase === PHASES.NIGHT_INTRO) {
-                    alert("밤에는 채팅을 할 수 없습니다."); 
-                    setChatMsg('');
-                    return; 
+                    alert("밤에는 채팅을 할 수 없습니다."); setChatMsg(''); return; 
                 }
-                
                 await addDoc(collection(db, 'rooms', roomId, 'messages'), {
-                    sender: nickname,
-                    text: chatMsg,
-                    timestamp: serverTimestamp()
+                    sender: nickname, text: chatMsg, timestamp: serverTimestamp()
                 });
                 setChatMsg('');
             };
@@ -465,9 +455,13 @@
                                 <span className="text-sm font-normal ml-2 text-gray-400">({room.players.length}/{room.settings.maxPlayers})</span>
                             </h2>
                         </div>
-                        <div className="text-center">
+                        <div className="flex flex-col items-center">
                              {room.gameState.phase === PHASES.WAITING ? <span className="text-green-400">대기 중</span> : 
-                              <span className="font-mono text-xl text-yellow-400">{room.gameState.dayCount}일차 {room.gameState.phase.startsWith('night') ? '🌙 밤' : '☀️ 낮'}</span>}
+                              <div className="text-center">
+                                  <span className="font-mono text-xl text-yellow-400">{room.gameState.dayCount}일차 {room.gameState.phase.startsWith('night') ? '🌙 밤' : '☀️ 낮'}</span>
+                                  {room.gameState.phase === PHASES.DAY_VOTE && <div className="text-red-500 font-bold text-2xl animate-pulse">{Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</div>}
+                              </div>
+                             }
                         </div>
                         <div>
                             <span className={`font-bold px-2 py-1 rounded ${me.role === ROLES.MAFIA ? 'bg-red-900 text-red-200' : 'bg-gray-700'}`}>
@@ -480,8 +474,7 @@
                     <div className="flex-1 flex overflow-hidden">
                         {/* Player Grid */}
                         <div className="flex-1 p-4 overflow-y-auto relative">
-                            {/* Phase Notification Overlay */}
-                            <GameNotification phase={room.gameState.phase} logs={room.gameState.logs} />
+                            <GameNotification phase={room.gameState.phase} logs={room.gameState.logs} lastExecuted={room.gameState.lastExecuted} />
 
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-4xl mx-auto mt-8">
                                 {room.players.map(player => (
@@ -526,11 +519,6 @@
                                 <button type="submit" className="bg-gray-700 px-4 py-2 rounded hover:bg-gray-600"><i className="ph ph-paper-plane-right"></i></button>
                             </form>
                         )}
-                        {(!me.isAlive || room.gameState.phase.startsWith('night')) && (
-                            <div className="p-3 bg-black text-center text-gray-500 text-sm">
-                                {!me.isAlive ? "사망하여 채팅을 할 수 없습니다." : "밤에는 조용히 해야 합니다."}
-                            </div>
-                        )}
                     </div>
                 </div>
             );
@@ -540,55 +528,46 @@
         function PlayerCard({ player, me, room, roomId }) {
             const isDead = !player.isAlive;
             const isMe = player.uid === me.uid;
+            const [showVoteBtn, setShowVoteBtn] = useState(false);
+            
+            const hasVoted = room.gameState.voteList?.day?.[me.uid];
 
-            const handleAction = async () => {
-                if (isDead || isMe || !me.isAlive) return;
-                
-                const phase = room.gameState.phase;
-                
-                // Night Actions
-                if (phase === PHASES.NIGHT_ACT) {
-                    // Mafia kill vote
-                    if (me.role === ROLES.MAFIA) {
-                        await updateDoc(doc(db, 'rooms', roomId), {
-                            [`gameState.voteList.mafia.${player.uid}`]: increment(1)
-                        });
-                        alert(`${player.nickname}님을 선택했습니다.`);
-                    }
-                    // Doctor heal vote
-                    if (me.role === ROLES.DOCTOR) {
-                        // Can't heal same person twice condition check logic should be in Host, 
-                        // but UI can block immediate "same target" if we tracked it. 
-                        // Host logic will validate final result.
-                        await updateDoc(doc(db, 'rooms', roomId), {
-                            [`gameState.voteList.doctor.${player.uid}`]: increment(1)
-                        });
-                        alert(`${player.nickname}님을 치료 대상으로 선택했습니다.`);
-                    }
-                    // Police invest vote
-                    if (me.role === ROLES.POLICE) {
-                        await updateDoc(doc(db, 'rooms', roomId), {
-                            [`gameState.voteList.police.${player.uid}`]: increment(1)
-                        });
-                        alert(`${player.nickname}님을 조사합니다.`);
-                    }
+            const handleClick = () => {
+                if(isDead || isMe || !me.isAlive) return;
+                if(room.gameState.phase === PHASES.DAY_VOTE) {
+                    if(hasVoted) { alert("이미 투표하셨습니다."); return; }
+                    setShowVoteBtn(!showVoteBtn);
+                } else if (room.gameState.phase === PHASES.NIGHT_ACT) {
+                     handleNightAction();
                 }
+            };
 
-                // Day Vote
-                if (phase === PHASES.DAY_VOTE) {
-                    // Individual vote tracking
-                    const currentVotes = room.gameState.voteList?.day || {};
-                    if (currentVotes[me.uid]) { alert("이미 투표했습니다."); return; }
-                    
-                    await updateDoc(doc(db, 'rooms', roomId), {
-                        [`gameState.voteList.day.${me.uid}`]: player.uid
-                    });
-                    alert(`${player.nickname}님에게 투표했습니다.`);
+            const handleVote = async (e) => {
+                e.stopPropagation();
+                if(!confirm(`${player.nickname}님에게 투표하시겠습니까?`)) return;
+                
+                await updateDoc(doc(db, 'rooms', roomId), {
+                    [`gameState.voteList.day.${me.uid}`]: player.uid
+                });
+                setShowVoteBtn(false);
+            };
+
+            const handleNightAction = async () => {
+                 // Night Actions
+                 if (me.role === ROLES.MAFIA) {
+                    await updateDoc(doc(db, 'rooms', roomId), { [`gameState.voteList.mafia.${player.uid}`]: increment(1) });
+                    alert(`${player.nickname}님을 선택했습니다.`);
+                } else if (me.role === ROLES.DOCTOR) {
+                    await updateDoc(doc(db, 'rooms', roomId), { [`gameState.voteList.doctor.${player.uid}`]: increment(1) });
+                    alert(`${player.nickname}님을 치료 대상으로 선택했습니다.`);
+                } else if (me.role === ROLES.POLICE) {
+                    await updateDoc(doc(db, 'rooms', roomId), { [`gameState.voteList.police.${player.uid}`]: increment(1) });
+                    alert(`${player.nickname}님을 조사합니다.`);
                 }
             };
 
             return (
-                <div onClick={handleAction} className={`
+                <div onClick={handleClick} className={`
                     relative p-4 rounded-lg border-2 flex flex-col items-center gap-2 cursor-pointer transition transform hover:scale-105
                     ${isDead ? 'border-gray-800 opacity-50 grayscale' : 'border-gray-600 bg-gray-800 hover:border-red-500'}
                     ${isMe ? 'ring-2 ring-blue-500' : ''}
@@ -599,8 +578,20 @@
                     </div>
                     <span className="font-bold truncate w-full text-center">{player.nickname}</span>
                     {player.isHost && <span className="text-xs bg-yellow-600 px-2 py-0.5 rounded">방장</span>}
-                    {/* Show roles only at end or self */}
                     {(isMe || room.gameState.phase === PHASES.GAME_OVER) && <span className="text-xs text-gray-400">{player.role}</span>}
+                    
+                    {/* Vote Button Overlay */}
+                    {showVoteBtn && !hasVoted && (
+                        <div className="absolute inset-0 bg-black/80 flex items-center justify-center rounded-lg z-20 animate-fade-in">
+                            <button onClick={handleVote} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transform hover:scale-110 transition">
+                                투표하기
+                            </button>
+                        </div>
+                    )}
+                    {/* Vote Status Indicator (Optional) */}
+                    {room.gameState.phase === PHASES.DAY_VOTE && room.gameState.voteList?.day?.[player.uid] && (
+                        <div className="absolute top-2 right-2 w-3 h-3 bg-green-500 rounded-full" title="투표 완료"></div>
+                    )}
                 </div>
             );
         }
@@ -614,14 +605,12 @@
 
             const startGame = async () => {
                 if (!room.players.every(p => p.isHost || p.isReady)) { alert("모든 플레이어가 준비해야 합니다."); return; }
-                // Assign Roles
                 let availableRoles = [];
                 for(let i=0; i<room.settings.mafia; i++) availableRoles.push(ROLES.MAFIA);
                 for(let i=0; i<room.settings.police; i++) availableRoles.push(ROLES.POLICE);
                 for(let i=0; i<room.settings.doctor; i++) availableRoles.push(ROLES.DOCTOR);
                 while(availableRoles.length < room.players.length) availableRoles.push(ROLES.CITIZEN);
                 
-                // Shuffle
                 availableRoles.sort(() => Math.random() - 0.5);
                 
                 const newPlayers = room.players.map((p, i) => ({
@@ -634,7 +623,7 @@
                     gameState: {
                         phase: PHASES.ROLE_REVEAL,
                         dayCount: 1,
-                        phaseEndTime: Date.now() + 5000, // 5 sec reveal
+                        phaseEndTime: Date.now() + 5000,
                         logs: [],
                         voteList: {},
                         nightResults: {}
@@ -658,8 +647,8 @@
         }
 
         // 9. Notification & Phase Overlay
-        function GameNotification({ phase, logs }) {
-            if (phase === PHASES.ROLE_REVEAL) return <OverlayMsg text="직업이 배정되었습니다. 당신의 역할을 확인하세요." />;
+        function GameNotification({ phase, logs, lastExecuted }) {
+            if (phase === PHASES.ROLE_REVEAL) return <OverlayMsg text="직업이 배정되었습니다." sub="당신의 역할을 확인하세요." />;
             if (phase === PHASES.NIGHT_INTRO) return <OverlayMsg text="밤이 되었습니다." sub="마피아는 고개를 들어주세요..." />;
             if (phase === PHASES.DAY_INTRO) {
                 const lastLog = logs[logs.length - 1] || {};
@@ -673,6 +662,25 @@
                             <hr className="border-gray-600"/>
                             <p className="text-xl font-bold text-white">💀 사망자: {lastLog.dead || "없음"}</p>
                         </div>
+                    </div>
+                );
+            }
+            if (phase === PHASES.DAY_RESULT) {
+                return (
+                    <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-8 text-center animate-fade-in">
+                        <h2 className="text-4xl font-bold text-red-500 mb-4">투표 결과</h2>
+                        {lastExecuted ? (
+                            <div className="space-y-4">
+                                <p className="text-2xl text-white"><span className="font-bold text-yellow-400">{lastExecuted.nick}</span> 님이 처형되었습니다.</p>
+                                <p className="text-xl text-gray-300">
+                                    해당 플레이어는 <span className={lastExecuted.role === ROLES.MAFIA ? "text-red-500 font-bold text-3xl" : "text-green-500 font-bold text-3xl"}>
+                                        {lastExecuted.role === ROLES.MAFIA ? "마피아였습니다." : "마피아가 아닙니다."}
+                                    </span>
+                                </p>
+                            </div>
+                        ) : (
+                            <p className="text-2xl text-gray-400">투표 결과, 아무도 처형되지 않았습니다.</p>
+                        )}
                     </div>
                 );
             }
@@ -693,194 +701,126 @@
 
         // 10. HOST LOGIC (The Brain)
         function HostLogic({ room, roomId }) {
-            // Runs only on Host's browser
             useEffect(() => {
                 const interval = setInterval(async () => {
                     if (!room || room.status !== 'playing') return;
                     const now = Date.now();
                     const gs = room.gameState;
                     
-                    if (now < gs.phaseEndTime) return;
-
                     // Phase Transition Logic
                     let updates = {};
                     
-                    if (gs.phase === PHASES.ROLE_REVEAL) {
-                        updates = {
-                            'gameState.phase': PHASES.NIGHT_INTRO,
-                            'gameState.phaseEndTime': now + 3000
-                        };
-                    } else if (gs.phase === PHASES.NIGHT_INTRO) {
-                        updates = {
-                            'gameState.phase': PHASES.NIGHT_ACT,
-                            'gameState.phaseEndTime': now + 10000, // 10 sec action
-                            'gameState.voteList': { mafia: {}, doctor: {}, police: {} } // Reset votes
-                        };
-                    } else if (gs.phase === PHASES.NIGHT_ACT) {
-                        // Process Night Results
+                    if (gs.phase === PHASES.ROLE_REVEAL && now >= gs.phaseEndTime) {
+                        updates = { 'gameState.phase': PHASES.NIGHT_INTRO, 'gameState.phaseEndTime': now + 3000 };
+                    } 
+                    else if (gs.phase === PHASES.NIGHT_INTRO && now >= gs.phaseEndTime) {
+                        updates = { 'gameState.phase': PHASES.NIGHT_ACT, 'gameState.phaseEndTime': now + 15000, 'gameState.voteList': { mafia: {}, doctor: {}, police: {} } };
+                    } 
+                    else if (gs.phase === PHASES.NIGHT_ACT && now >= gs.phaseEndTime) {
+                        // Night Result Calculation (Same as before)
                         const votes = gs.voteList || {};
+                        const mafiaTarget = getWinner(votes.mafia || {}, room.players.filter(p=>p.isAlive && p.role !== ROLES.MAFIA));
+                        const doctorTarget = getWinner(votes.doctor || {}, room.players.filter(p=>p.isAlive));
+                        const policeTarget = getWinner(votes.police || {}, room.players.filter(p=>p.isAlive)); // Police logic simplified
                         
-                        // 1. Mafia Target (Random if tie/empty)
-                        const mafiaVotes = votes.mafia || {};
-                        let mafiaTarget = getWinner(mafiaVotes, room.players.filter(p=>p.isAlive && p.role !== ROLES.MAFIA));
+                        // Doctor Constraint
+                        let finalDoctorTarget = doctorTarget;
+                        if (doctorTarget && doctorTarget === room.lastHealedId) finalDoctorTarget = null;
+
+                        let deadId = (mafiaTarget && mafiaTarget !== finalDoctorTarget) ? mafiaTarget : null;
                         
-                        // 2. Doctor Target
-                        const docVotes = votes.doctor || {};
-                        let doctorTarget = getWinner(docVotes, room.players.filter(p=>p.isAlive));
+                        const newPlayers = room.players.map(p => p.uid === deadId ? { ...p, isAlive: false } : p);
+                        const winResult = checkWin(newPlayers);
 
-                        // Doctor Constraint: Cannot save same person twice consecutively (logic check needed here)
-                        // *Simply checking against lastHealedId stored in root*
-                        if (doctorTarget && doctorTarget === room.lastHealedId) {
-                            doctorTarget = null; // Failed to heal due to cooldown
+                        if(winResult) {
+                             await updateDoc(doc(db, 'rooms', roomId), { players: newPlayers, 'gameState.phase': PHASES.GAME_OVER, 'gameState.logs': arrayUnion({ winner: winResult, dead: getNick(room, deadId) }) }); return;
                         }
-
-                        // 3. Police Target
-                        const polVotes = votes.police || {};
-                        let policeTarget = getWinner(polVotes, room.players.filter(p=>p.isAlive && p.uid !== Object.keys(polVotes)[0])); // self check excluded loosely
-
-                        // Resolve Death
-                        let deadId = null;
-                        if (mafiaTarget && mafiaTarget !== doctorTarget) {
-                            deadId = mafiaTarget;
-                        }
-
-                        // Update Players
-                        const newPlayers = room.players.map(p => {
-                            if (p.uid === deadId) return { ...p, isAlive: false };
-                            return p;
-                        });
-
-                        // Check Win Condition
-                        const result = checkWin(newPlayers);
-                        if (result) {
-                             await updateDoc(doc(db, 'rooms', roomId), {
-                                players: newPlayers,
-                                'gameState.phase': PHASES.GAME_OVER,
-                                'gameState.logs': arrayUnion({ winner: result, dead: getNick(room, deadId) })
-                            });
-                            return;
-                        }
-
-                        // Police Result Message (Only for police? No, logs are public, but we filter UI display. 
-                        // Actually requirement says: "Show what happened during night". 
-                        // "Police -> Investigated Role".
-                        const policeResult = policeTarget ? (room.players.find(p=>p.uid === policeTarget)?.role) : "조사 안함";
                         
                         updates = {
-                            players: newPlayers,
-                            lastHealedId: doctorTarget || null,
-                            'gameState.phase': PHASES.DAY_INTRO,
-                            'gameState.phaseEndTime': now + 10000,
+                            players: newPlayers, lastHealedId: finalDoctorTarget || null,
+                            'gameState.phase': PHASES.DAY_INTRO, 'gameState.phaseEndTime': now + 10000,
                             'gameState.logs': arrayUnion({
-                                mafiaKill: getNick(room, mafiaTarget),
-                                doctorSave: getNick(room, doctorTarget),
-                                policeInvest: policeResult,
+                                mafiaKill: getNick(room, mafiaTarget), doctorSave: getNick(room, finalDoctorTarget),
+                                policeInvest: policeTarget ? (room.players.find(p=>p.uid === policeTarget)?.role) : "조사 안함",
                                 dead: getNick(room, deadId)
                             })
                         };
-
-                    } else if (gs.phase === PHASES.DAY_INTRO) {
-                        updates = {
-                            'gameState.phase': PHASES.DAY_DISCUSS,
-                            'gameState.phaseEndTime': now + (180 * 1000) // 3 min
+                    } 
+                    else if (gs.phase === PHASES.DAY_INTRO && now >= gs.phaseEndTime) {
+                        // Start Day Vote (3 Minutes)
+                        updates = { 
+                            'gameState.phase': PHASES.DAY_VOTE, 
+                            'gameState.phaseEndTime': now + (180 * 1000),
+                            'gameState.voteList.day': {}
                         };
-                    } else if (gs.phase === PHASES.DAY_DISCUSS) {
-                        updates = {
-                            'gameState.phase': PHASES.DAY_VOTE,
-                            'gameState.phaseEndTime': now + 15000, // 15s to vote
-                            'gameState.voteList.day': {} 
-                        };
-                    } else if (gs.phase === PHASES.DAY_VOTE) {
-                        // Count Day Votes
-                        const votes = Object.values(gs.voteList?.day || {});
-                        const voteCounts = votes.reduce((acc, uid) => { acc[uid] = (acc[uid] || 0) + 1; return acc; }, {});
+                    } 
+                    else if (gs.phase === PHASES.DAY_VOTE) {
+                        // Check for time end OR all alive players voted
+                        const aliveCount = room.players.filter(p => p.isAlive).length;
+                        const voteCount = Object.keys(gs.voteList?.day || {}).length;
                         
-                        let executeId = null;
-                        let maxV = 0;
-                        Object.entries(voteCounts).forEach(([uid, count]) => {
-                            if (count > maxV) { maxV = count; executeId = uid; }
-                            else if (count === maxV) { executeId = null; } // Tie = no death
-                        });
-
-                        // Execution
-                        let newPlayers = room.players;
-                        if (executeId) {
-                            newPlayers = room.players.map(p => p.uid === executeId ? { ...p, isAlive: false } : p);
-                        }
-
-                        // Check Win
-                         const result = checkWin(newPlayers);
-                        if (result) {
-                             await updateDoc(doc(db, 'rooms', roomId), {
-                                players: newPlayers,
-                                'gameState.phase': PHASES.GAME_OVER,
-                                'gameState.logs': arrayUnion({ winner: result, dead: getNick(room, executeId) })
+                        if (now >= gs.phaseEndTime || voteCount >= aliveCount) {
+                            // Tally Votes
+                            const votes = Object.values(gs.voteList?.day || {});
+                            const voteCounts = votes.reduce((acc, uid) => { acc[uid] = (acc[uid] || 0) + 1; return acc; }, {});
+                            let executeId = null, maxV = 0;
+                            Object.entries(voteCounts).forEach(([uid, count]) => {
+                                if (count > maxV) { maxV = count; executeId = uid; }
+                                else if (count === maxV) { executeId = null; }
                             });
-                            return;
-                        }
-                        
-                        updates = {
-                            players: newPlayers,
-                            'gameState.phase': PHASES.DAY_RESULT,
-                            'gameState.phaseEndTime': now + 5000,
-                            'gameState.dayCount': increment(1),
-                            'gameState.lastExecuted': executeId ? { 
-                                nick: getNick(room, executeId), 
-                                role: room.players.find(p=>p.uid===executeId).role 
-                            } : null
-                        };
 
-                    } else if (gs.phase === PHASES.DAY_RESULT) {
-                         updates = {
-                            'gameState.phase': PHASES.NIGHT_INTRO,
-                            'gameState.phaseEndTime': now + 3000
-                        };
+                            let newPlayers = room.players;
+                            if (executeId) newPlayers = room.players.map(p => p.uid === executeId ? { ...p, isAlive: false } : p);
+                            
+                            const winResult = checkWin(newPlayers);
+                            if(winResult) {
+                                await updateDoc(doc(db, 'rooms', roomId), { players: newPlayers, 'gameState.phase': PHASES.GAME_OVER, 'gameState.logs': arrayUnion({ winner: winResult, dead: getNick(room, executeId) }) }); return;
+                            }
+
+                            updates = {
+                                players: newPlayers,
+                                'gameState.phase': PHASES.DAY_RESULT,
+                                'gameState.phaseEndTime': now + 10000, // Show result for 10s
+                                'gameState.dayCount': increment(1),
+                                'gameState.lastExecuted': executeId ? { 
+                                    nick: getNick(room, executeId), 
+                                    role: room.players.find(p=>p.uid===executeId).role 
+                                } : null
+                            };
+                        }
+                    } 
+                    else if (gs.phase === PHASES.DAY_RESULT && now >= gs.phaseEndTime) {
+                        updates = { 'gameState.phase': PHASES.NIGHT_INTRO, 'gameState.phaseEndTime': now + 3000 };
                     }
 
                     if (Object.keys(updates).length > 0) {
                         await updateDoc(doc(db, 'rooms', roomId), updates);
                     }
-
                 }, 1000);
                 return () => clearInterval(interval);
             }, [room, roomId]);
-
-            return null; // Logic only
+            return null;
         }
 
-        // Helpers for Host Logic
+        // Helpers
         function getWinner(votesObj, candidates) {
-            // votesObj: { uid: count, uid2: count } -> wait, storing map { targetId: count }
-            // If input is empty, pick random from candidates
             const targets = Object.entries(votesObj);
             if (targets.length === 0) {
                 if (!candidates || candidates.length === 0) return null;
                 return candidates[Math.floor(Math.random() * candidates.length)].uid;
             }
-            
-            // Find max
-            let max = -1;
-            let winner = null;
-            targets.forEach(([uid, count]) => {
-                if (count > max) { max = count; winner = uid; }
-            });
-            // Note: Requirement says "if not majority, random among voted". 
-            // Simplified here: just taking max. Real "majority" needs total players count check.
-            // Implementing "Random among voted if no majority" is complex without exact counts.
-            // Falling back to Max Vote wins for smoother gameplay in this MVP.
+            let max = -1, winner = null;
+            targets.forEach(([uid, count]) => { if (count > max) { max = count; winner = uid; } });
             return winner;
         }
-
         function getNick(room, uid) {
             if (!uid) return "없음";
             return room.players.find(p => p.uid === uid)?.nickname || "알수없음";
         }
-
         function checkWin(players) {
             const alive = players.filter(p => p.isAlive);
             const mafia = alive.filter(p => p.role === ROLES.MAFIA).length;
-            const citizens = alive.length - mafia; // Police/Doc are citizens side
-
+            const citizens = alive.length - mafia;
             if (mafia === 0) return 'citizen';
             if (mafia >= citizens) return 'mafia';
             return null;
