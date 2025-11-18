@@ -342,15 +342,29 @@
             const [chatMsg, setChatMsg] = useState('');
             const [chatLogs, setChatLogs] = useState([]);
             const chatEndRef = useRef(null);
+            
+            // Fix: Use ref to track if user has successfully joined to prevent false kick detection
+            const hasJoinedRef = useRef(false);
 
             // Room Sync
             useEffect(() => {
                 const unsub = onSnapshot(doc(db, 'rooms', roomId), (docSnap) => {
                     if (!docSnap.exists()) { alert("방이 사라졌습니다."); onLeave(); return; }
                     const data = docSnap.data();
-                    // Check if I am kicked
+                    
                     const me = data.players.find(p => p.uid === user.uid);
-                    if (!me && data.status === 'waiting') { alert("강퇴당했습니다."); onLeave(); return; }
+                    
+                    // Mark as joined if found
+                    if (me) {
+                        hasJoinedRef.current = true;
+                    }
+
+                    // Check if I am kicked (Only if I was previously joined)
+                    if (hasJoinedRef.current && !me && data.status === 'waiting') { 
+                        alert("강퇴당했습니다."); 
+                        onLeave(); 
+                        return; 
+                    }
                     setRoom(data);
                 });
                 return () => unsub();
