@@ -141,8 +141,8 @@
             return (
                 <div className="flex h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
                     <div className="text-center space-y-6 animate-fade-in">
-                        <h1 className="text-6xl font-black text-red-600 tracking-tighter drop-shadow-lg">MAFIA</h1>
-                        <p className="text-gray-400 text-lg"></p>
+                        <h1 className="text-6xl font-black text-red-600 tracking-tighter drop-shadow-lg mb-8">MAFIA</h1>
+                        {/* 문구 삭제됨 */}
                         <button onClick={handleLogin} className="bg-white text-gray-900 font-bold py-3 px-8 rounded-full hover:bg-gray-200 transition flex items-center gap-2 mx-auto">
                             <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6" />
                             Google 계정으로 시작
@@ -508,21 +508,25 @@
             const isDead = !player.isAlive;
             const isMe = player.uid === me.uid;
             const [showVoteBtn, setShowVoteBtn] = useState(false);
+            const [showKickBtn, setShowKickBtn] = useState(false);
             const hasVoted = room.gameState.voteList?.day?.[me.uid];
             const isRainbowNick = player.nickname === 'Admin' || player.nickname === '김치볶음밥' || player.nickname === '이윤우담당일진';
             
-            // Team Identification Check
-            // If I am Mafia, Police, or Doctor, and this player has the same role (and is not me), show "Teammate"
             const isTeammate = me.role === player.role && !isMe && me.role !== ROLES.CITIZEN && me.role;
 
             const handleClick = () => {
+                // HOST KICK LOGIC (Waiting Room)
+                if (room.status === 'waiting' && me.isHost && !player.isHost && !isMe) {
+                     setShowKickBtn(!showKickBtn);
+                     return;
+                }
+
                 if(isDead || !me.isAlive) return;
-                // Block click on self UNLESS it is Doctor phase and I am Doctor (Doctor Self-Heal)
                 if (isMe && !(me.role === ROLES.DOCTOR && room.gameState.phase === PHASES.NIGHT_DOCTOR)) return;
 
                 const phase = room.gameState.phase;
                 if(phase === PHASES.DAY_VOTE) {
-                    if(isMe) return; // Can't vote self
+                    if(isMe) return; 
                     if(hasVoted) { alert("이미 투표하셨습니다."); return; }
                     setShowVoteBtn(!showVoteBtn);
                 } 
@@ -536,6 +540,13 @@
                 if(!confirm(`${player.nickname}님에게 투표하시겠습니까?`)) return;
                 await updateDoc(doc(db, 'rooms', roomId), { [`gameState.voteList.day.${me.uid}`]: player.uid });
                 setShowVoteBtn(false);
+            };
+
+            const handleKick = async (e) => {
+                e.stopPropagation();
+                if (!confirm(`${player.nickname}님을 강퇴하시겠습니까?`)) return;
+                const newPlayers = room.players.filter(p => p.uid !== player.uid);
+                await updateDoc(doc(db, 'rooms', roomId), { players: newPlayers });
             };
 
             const handleNightAction = async (type) => {
@@ -561,7 +572,7 @@
             if (me.isAlive && !isDead && !hasActed) {
                 if (room.gameState.phase === PHASES.NIGHT_MAFIA && me.role === ROLES.MAFIA && !isMe) canAct = true;
                 if (room.gameState.phase === PHASES.NIGHT_POLICE && me.role === ROLES.POLICE && !isMe) canAct = true;
-                if (room.gameState.phase === PHASES.NIGHT_DOCTOR && me.role === ROLES.DOCTOR) canAct = true; // Doctor can click anyone including self
+                if (room.gameState.phase === PHASES.NIGHT_DOCTOR && me.role === ROLES.DOCTOR) canAct = true; 
             }
 
             return (
@@ -577,10 +588,16 @@
                     {player.isHost && <span className="text-xs bg-yellow-600 px-2 py-0.5 rounded">방장</span>}
                     {(isMe || room.gameState.phase === PHASES.GAME_OVER) && <span className="text-xs text-gray-400">{player.role}</span>}
                     
-                    {/* Teammate Indicator */}
                     {isTeammate && <span className="text-xs bg-indigo-600 text-white px-2 py-0.5 rounded animate-pulse">동료</span>}
-
                     {room.status === 'waiting' && player.isReady && <span className="absolute -top-3 px-3 py-1 text-xs font-bold bg-green-600 text-white rounded-full shadow-lg border border-green-400 animate-fade-in">준비 완료!</span>}
+                    
+                    {/* KICK BUTTON (Host Only, Waiting Room) */}
+                    {showKickBtn && room.status === 'waiting' && (
+                        <div className="absolute inset-0 bg-black/80 flex items-center justify-center rounded-lg z-20 animate-fade-in">
+                            <button onClick={handleKick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full shadow-lg">강퇴하기</button>
+                        </div>
+                    )}
+
                     {showVoteBtn && !hasVoted && <div className="absolute inset-0 bg-black/80 flex items-center justify-center rounded-lg z-20 animate-fade-in"><button onClick={handleVote} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transform hover:scale-110 transition">투표하기</button></div>}
                     {room.gameState.phase === PHASES.DAY_VOTE && room.gameState.voteList?.day?.[player.uid] && <div className="absolute top-2 right-2 w-3 h-3 bg-green-500 rounded-full" title="투표 완료"></div>}
                     {canAct && hasActed && <div className="absolute top-2 right-2 px-2 py-0.5 text-xs font-bold bg-green-500 text-white rounded-full">완료</div>}
@@ -619,27 +636,18 @@
 
         function GameNotification({ phase, logs, lastExecuted, isHost, room, roomId }) {
             const [showResult, setShowResult] = useState(false);
-
-            // Effect for Day Result Reveal Animation
             useEffect(() => {
                 if (phase === PHASES.DAY_RESULT) {
                     setShowResult(false);
-                    const timer = setTimeout(() => setShowResult(true), 3000); // 3 seconds delay
+                    const timer = setTimeout(() => setShowResult(true), 3000);
                     return () => clearTimeout(timer);
                 } else {
                     setShowResult(false);
                 }
             }, [phase]);
-
-            // Reset Game Function (For Host)
             const handleResetGame = async () => {
                 if (!confirm("모든 플레이어를 대기실로 이동시키겠습니까?")) return;
-                const newPlayers = room.players.map(p => ({
-                    ...p,
-                    isAlive: true,
-                    role: null,
-                    isReady: false
-                }));
+                const newPlayers = room.players.map(p => ({ ...p, isAlive: true, role: null, isReady: false }));
                 await updateDoc(doc(db, 'rooms', roomId), {
                     status: 'waiting',
                     players: newPlayers,
@@ -647,11 +655,9 @@
                     lastHealedId: null
                 });
             };
-
             if (phase === PHASES.ROLE_REVEAL) return <OverlayMsg text="직업이 배정되었습니다." sub="당신의 역할을 확인하세요." />;
             if (phase === PHASES.NIGHT_INTRO) return <OverlayMsg text="밤이 되었습니다." sub="곧 직업 활동이 시작됩니다..." />;
             if (phase === PHASES.NIGHT_MAFIA || phase === PHASES.NIGHT_POLICE || phase === PHASES.NIGHT_DOCTOR) return null;
-
             if (phase === PHASES.DAY_INTRO) {
                 const lastLog = logs[logs.length - 1] || {};
                 return (
