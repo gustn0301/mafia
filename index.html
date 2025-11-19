@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>마피아 게임 (Mafia Online)</title>
-    <!-- Favicon: 검 모양 (🗡️)으로 변경 -->
+    <!-- Favicon: 검 모양 (🗡️) -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗡️</text></svg>">
     
     <!-- Tailwind CSS -->
@@ -147,7 +147,7 @@
                 <div className="flex h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
                     <div className="text-center space-y-6 animate-fade-in">
                         <h1 className="text-6xl font-black text-red-600 tracking-tighter drop-shadow-lg">MAFIA</h1>
-                        <p className="text-gray-400 text-lg">아무도 믿지 마세요. 밤이 찾아옵니다.</p>
+                        <p className="text-gray-400 text-lg"></p>
                         <button onClick={handleLogin} className="bg-white text-gray-900 font-bold py-3 px-8 rounded-full hover:bg-gray-200 transition flex items-center gap-2 mx-auto">
                             <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6" />
                             Google 계정으로 시작
@@ -634,6 +634,13 @@
                     {player.isHost && <span className="text-xs bg-yellow-600 px-2 py-0.5 rounded">방장</span>}
                     {(isMe || room.gameState.phase === PHASES.GAME_OVER) && <span className="text-xs text-gray-400">{player.role}</span>}
                     
+                    {/* READY STATUS BADGE (New) */}
+                    {room.status === 'waiting' && player.isReady && (
+                        <span className="absolute -top-3 px-3 py-1 text-xs font-bold bg-green-600 text-white rounded-full shadow-lg border border-green-400 animate-fade-in">
+                            준비 완료!
+                        </span>
+                    )}
+
                     {/* Vote Button Overlay */}
                     {showVoteBtn && !hasVoted && (
                         <div className="absolute inset-0 bg-black/80 flex items-center justify-center rounded-lg z-20 animate-fade-in">
@@ -669,7 +676,10 @@
             };
 
             const startGame = async () => {
-                if (!room.players.every(p => p.isHost || p.isReady)) { alert("모든 플레이어가 준비해야 합니다."); return; }
+                // 방장 포함 모두 준비 완료인지 확인
+                if (room.players.length < 4) { alert("최소 4명이 필요합니다."); return; }
+                if (!room.players.every(p => p.isHost || p.isReady)) { alert("방장을 제외한 모든 플레이어가 준비해야 합니다."); return; }
+                
                 let availableRoles = [];
                 for(let i=0; i<room.settings.mafia; i++) availableRoles.push(ROLES.MAFIA);
                 for(let i=0; i<room.settings.police; i++) availableRoles.push(ROLES.POLICE);
@@ -703,8 +713,11 @@
                             게임 시작
                         </button>
                     ) : (
-                        <button onClick={toggleReady} className={`px-8 py-3 rounded-full font-bold text-xl shadow-lg ${me.isReady ? 'bg-green-600' : 'bg-gray-600'}`}>
-                            {me.isReady ? '준비 완료' : '준비 하기'}
+                        // 비 방장 플레이어의 준비/취소 버튼 로직 (업데이트됨)
+                        <button onClick={toggleReady} 
+                                className={`px-8 py-3 rounded-full font-bold text-xl shadow-lg transition-colors duration-300 
+                                            ${me.isReady ? 'bg-gray-600 hover:bg-gray-500 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}`}>
+                            {me.isReady ? '준비 취소' : '준비 완료'}
                         </button>
                     )}
                 </div>
