@@ -27,6 +27,40 @@
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         .animate-fade-in { animation: fadeIn 0.5s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* --- Admin Rainbow Text Effect (NEW) --- */
+        .rainbow-text {
+            /* 무지개 색상으로 선형 그라데이션 배경 설정 */
+            background: linear-gradient(
+                90deg,
+                #ff0000, /* Red */
+                #ff7f00, /* Orange */
+                #ffff00, /* Yellow */
+                #00ff00, /* Green */
+                #0000ff, /* Blue */
+                #4b0082, /* Indigo */
+                #9400d3  /* Violet */
+            );
+            background-size: 200% 100%; /* 그라데이션이 움직일 수 있도록 크기 설정 */
+            animation: rainbow-shift 4s linear infinite; /* 애니메이션 적용 */
+
+            /* 텍스트 색상을 투명하게 만들고 배경을 텍스트 클립으로 사용 */
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            /* 표준 속성 (호환성 목적) */
+            background-clip: text;
+            color: transparent;
+            font-weight: 900; 
+            text-shadow: 0 0 8px rgba(255, 255, 255, 0.5); /* 텍스트 주변에 밝은 그림자 추가 */
+        }
+
+        /* 그라데이션이 왼쪽에서 오른쪽으로 움직이는 애니메이션 */
+        @keyframes rainbow-shift {
+            to {
+                background-position: -200% 0;
+            }
+        }
+        /* --- End Admin Rainbow Text Effect --- */
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden">
@@ -147,7 +181,7 @@
                 <div className="flex h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
                     <div className="text-center space-y-6 animate-fade-in">
                         <h1 className="text-6xl font-black text-red-600 tracking-tighter drop-shadow-lg">MAFIA</h1>
-                        <p className="text-gray-400 text-lg"></p>
+                        <p className="text-gray-400 text-lg">아무도 믿지 마세요. 밤이 찾아옵니다.</p>
                         <button onClick={handleLogin} className="bg-white text-gray-900 font-bold py-3 px-8 rounded-full hover:bg-gray-200 transition flex items-center gap-2 mx-auto">
                             <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6" />
                             Google 계정으로 시작
@@ -549,6 +583,8 @@
             const [showVoteBtn, setShowVoteBtn] = useState(false);
             
             const hasVoted = room.gameState.voteList?.day?.[me.uid];
+            // NEW: Check for Admin nickname (case sensitive)
+            const isRainbowAdmin = player.nickname === 'Admin';
 
             const handleClick = () => {
                 if(isDead || isMe || !me.isAlive) return;
@@ -630,11 +666,13 @@
                     <div className="w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center text-xl font-bold">
                         {player.nickname[0]}
                     </div>
-                    <span className="font-bold truncate w-full text-center">{player.nickname}</span>
+                    {/* UPDATED: Apply rainbow-text class if nickname is 'Admin' */}
+                    <span className={`truncate w-full text-center ${isRainbowAdmin ? 'rainbow-text text-xl' : 'font-bold'}`}>{player.nickname}</span>
+                    
                     {player.isHost && <span className="text-xs bg-yellow-600 px-2 py-0.5 rounded">방장</span>}
                     {(isMe || room.gameState.phase === PHASES.GAME_OVER) && <span className="text-xs text-gray-400">{player.role}</span>}
                     
-                    {/* READY STATUS BADGE (New) */}
+                    {/* READY STATUS BADGE */}
                     {room.status === 'waiting' && player.isReady && (
                         <span className="absolute -top-3 px-3 py-1 text-xs font-bold bg-green-600 text-white rounded-full shadow-lg border border-green-400 animate-fade-in">
                             준비 완료!
@@ -713,7 +751,7 @@
                             게임 시작
                         </button>
                     ) : (
-                        // 비 방장 플레이어의 준비/취소 버튼 로직 (업데이트됨)
+                        // 비 방장 플레이어의 준비/취소 버튼 로직
                         <button onClick={toggleReady} 
                                 className={`px-8 py-3 rounded-full font-bold text-xl shadow-lg transition-colors duration-300 
                                             ${me.isReady ? 'bg-gray-600 hover:bg-gray-500 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}`}>
