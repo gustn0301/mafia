@@ -28,7 +28,7 @@
         .animate-fade-in { animation: fadeIn 0.5s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* --- Admin Rainbow Text Effect (NEW) --- */
+        /* --- Admin/Special Nickname Rainbow Text Effect --- */
         .rainbow-text {
             /* 무지개 색상으로 선형 그라데이션 배경 설정 */
             background: linear-gradient(
@@ -60,7 +60,7 @@
                 background-position: -200% 0;
             }
         }
-        /* --- End Admin Rainbow Text Effect --- */
+        /* --- End Admin/Special Nickname Rainbow Text Effect --- */
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden">
@@ -583,8 +583,8 @@
             const [showVoteBtn, setShowVoteBtn] = useState(false);
             
             const hasVoted = room.gameState.voteList?.day?.[me.uid];
-            // NEW: Check for Admin nickname (case sensitive)
-            const isRainbowAdmin = player.nickname === 'Admin';
+            // UPDATED: Check for Admin (case sensitive) OR 김치볶음밥
+            const isRainbowNick = player.nickname === 'Admin' || player.nickname === '김치볶음밥';
 
             const handleClick = () => {
                 if(isDead || isMe || !me.isAlive) return;
@@ -666,8 +666,8 @@
                     <div className="w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center text-xl font-bold">
                         {player.nickname[0]}
                     </div>
-                    {/* UPDATED: Apply rainbow-text class if nickname is 'Admin' */}
-                    <span className={`truncate w-full text-center ${isRainbowAdmin ? 'rainbow-text text-xl' : 'font-bold'}`}>{player.nickname}</span>
+                    {/* UPDATED: Apply rainbow-text class if nickname is 'Admin' OR '김치볶음밥' */}
+                    <span className={`truncate w-full text-center ${isRainbowNick ? 'rainbow-text text-xl' : 'font-bold'}`}>{player.nickname}</span>
                     
                     {player.isHost && <span className="text-xs bg-yellow-600 px-2 py-0.5 rounded">방장</span>}
                     {(isMe || room.gameState.phase === PHASES.GAME_OVER) && <span className="text-xs text-gray-400">{player.role}</span>}
