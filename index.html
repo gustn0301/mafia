@@ -584,7 +584,7 @@
             
             const hasVoted = room.gameState.voteList?.day?.[me.uid];
             // UPDATED: Check for Admin (case sensitive) OR 김치볶음밥
-            const isRainbowNick = player.nickname === 'Admin' || player.nickname === '김치볶음밥';
+            const isRainbowNick = player.nickname === 'Admin' || player.nickname === '김치볶음밥' || player.nickname === '이윤우담당일진';
 
             const handleClick = () => {
                 if(isDead || isMe || !me.isAlive) return;
