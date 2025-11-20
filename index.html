@@ -54,17 +54,18 @@
             text-shadow: 0 0 5px rgba(0, 200, 255, 0.3);
         }
 
+        /* Updated Shiny Border: Runs only 3 times then stops */
         .shiny-border {
-            box-shadow: 0 0 15px #FFD700;
-            animation: pulse-gold 2s infinite;
             border: 2px solid #FFD700 !important;
+            box-shadow: 0 0 5px #FFD700; 
+            animation: pulse-gold 1.5s 3 ease-in-out forwards; /* 3회 반복 후 정지 */
         }
 
         @keyframes rainbow-shift { to { background-position: -200% 0; } }
         @keyframes pulse-gold {
-            0% { box-shadow: 0 0 10px #FFD700; }
-            50% { box-shadow: 0 0 25px #FFD700, 0 0 5px white; }
-            100% { box-shadow: 0 0 10px #FFD700; }
+            0% { box-shadow: 0 0 5px #FFD700; }
+            50% { box-shadow: 0 0 20px #FFD700, 0 0 10px white; }
+            100% { box-shadow: 0 0 5px #FFD700; }
         }
 
         /* --- Night Atmosphere --- */
@@ -78,7 +79,7 @@
         }
         @keyframes night-pulse {
             0% { background-color: rgba(0,0,0,0.1); box-shadow: inset 0 0 100px rgba(0,0,0,0.8); }
-            50% { background-color: rgba(20,0,0,0.2); box-shadow: inset 0 0 200px rgba(50,0,0,0.8); } /* Slight red tint */
+            50% { background-color: rgba(20,0,0,0.2); box-shadow: inset 0 0 200px rgba(50,0,0,0.8); } 
             100% { background-color: rgba(0,0,0,0.1); box-shadow: inset 0 0 100px rgba(0,0,0,0.8); }
         }
     </style>
@@ -564,9 +565,9 @@
             const hasVoted = room.gameState.voteList?.day?.[me.uid];
             
             // Special Nicknames Logic
-            const isRainbow = ['Admin', '참치덮밥', '뷁'].includes(player.nickname);
-            const isOcean = player.nickname === '지카킬러';
-            const isShiny = ['Admin', '참치덮밥', '뷁'].includes(player.nickname);
+            const isRainbow = ['Admin', '참치덮밥', '이윤우담당일진'].includes(player.nickname);
+            const isOcean = player.nickname === '지카 킬러';
+            const isShiny = ['Admin', '참치덮밥', '이윤우담당일진'].includes(player.nickname);
             
             const isTeammate = me.role === player.role && !isMe && me.role !== ROLES.CITIZEN && me.role;
 
