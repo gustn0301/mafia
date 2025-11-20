@@ -29,7 +29,7 @@
         .animate-delayed-fade-in { animation: fadeIn 1s ease-in-out 0.5s forwards; opacity: 0; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* --- Admin/Special Nickname Rainbow Text Effect --- */
+        /* --- Special Nickname Effects --- */
         .rainbow-text {
             background: linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
             background-size: 200% 100%;
@@ -41,7 +41,46 @@
             font-weight: 900; 
             text-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
         }
+        
+        .ocean-blue-text {
+            background: linear-gradient(90deg, #00C9FF, #92FE9D);
+            background-size: 200% 100%;
+            animation: rainbow-shift 5s linear infinite;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: transparent;
+            font-weight: 900;
+            text-shadow: 0 0 5px rgba(0, 200, 255, 0.3);
+        }
+
+        .shiny-border {
+            box-shadow: 0 0 15px #FFD700;
+            animation: pulse-gold 2s infinite;
+            border: 2px solid #FFD700 !important;
+        }
+
         @keyframes rainbow-shift { to { background-position: -200% 0; } }
+        @keyframes pulse-gold {
+            0% { box-shadow: 0 0 10px #FFD700; }
+            50% { box-shadow: 0 0 25px #FFD700, 0 0 5px white; }
+            100% { box-shadow: 0 0 10px #FFD700; }
+        }
+
+        /* --- Night Atmosphere --- */
+        .night-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            z-index: 0;
+            box-shadow: inset 0 0 150px rgba(0,0,0,0.9);
+            animation: night-pulse 4s infinite ease-in-out;
+        }
+        @keyframes night-pulse {
+            0% { background-color: rgba(0,0,0,0.1); box-shadow: inset 0 0 100px rgba(0,0,0,0.8); }
+            50% { background-color: rgba(20,0,0,0.2); box-shadow: inset 0 0 200px rgba(50,0,0,0.8); } /* Slight red tint */
+            100% { background-color: rgba(0,0,0,0.1); box-shadow: inset 0 0 100px rgba(0,0,0,0.8); }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden">
@@ -59,7 +98,6 @@
             arrayUnion, arrayRemove, runTransaction, increment
         } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-        // --- Firebase Config ---
         const firebaseConfig = {
             apiKey: "AIzaSyCLZhWWBvaKTz45CW_s1iJnBPLTCwxRHCE",
             authDomain: "testy-c.firebaseapp.com",
@@ -75,7 +113,6 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // --- React Logic ---
         const { useState, useEffect, useRef, useMemo } = React;
 
         const PROFANITY_LIST = ['바보', '멍청이', '시발', '씨발', '개새끼', '병신', '느금마', '애미', '애비', '지랄', '닥쳐'];
@@ -89,6 +126,7 @@
             NIGHT_DOCTOR: 'night_doctor', 
             DAY_INTRO: 'day_intro',     
             DAY_VOTE: 'day_vote',       
+            DAY_VOTE_TALLY: 'day_vote_tally',
             DAY_RESULT: 'day_result',   
             GAME_OVER: 'game_over'
         };
@@ -142,7 +180,6 @@
                 <div className="flex h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
                     <div className="text-center space-y-6 animate-fade-in">
                         <h1 className="text-6xl font-black text-red-600 tracking-tighter drop-shadow-lg mb-8">MAFIA</h1>
-                        {/* 문구 삭제됨 */}
                         <button onClick={handleLogin} className="bg-white text-gray-900 font-bold py-3 px-8 rounded-full hover:bg-gray-200 transition flex items-center gap-2 mx-auto">
                             <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6" />
                             Google 계정으로 시작
@@ -163,7 +200,6 @@
                 const snapshot = await getDocs(q);
                 if (!snapshot.empty) { setError("이미 사용 중인 닉네임입니다."); return; }
                 
-                // Initial set: record timestamp
                 await setDoc(doc(db, 'users', user.uid), { 
                     nickname: input, 
                     uid: user.uid, 
@@ -199,7 +235,7 @@
                         const lastChange = data.lastNicknameChange || 0;
                         const now = Date.now();
                         const diff = now - lastChange;
-                        const cooldown = 30 * 24 * 60 * 60 * 1000; // 30 days
+                        const cooldown = 30 * 24 * 60 * 60 * 1000; 
 
                         if (diff < cooldown) {
                             const remaining = cooldown - diff;
@@ -223,12 +259,10 @@
                 if (!input.trim()) { setError("닉네임을 입력해주세요."); return; }
                 if (checkProfanity(input)) { setError("부적절한 단어가 포함되어 있습니다."); return; }
                 
-                // Check duplicate
                 const q = query(collection(db, 'users'), where('nickname', '==', input));
                 const snapshot = await getDocs(q);
                 if (!snapshot.empty) { setError("이미 사용 중인 닉네임입니다."); return; }
 
-                // Update
                 await updateDoc(doc(db, 'users', user.uid), {
                     nickname: input,
                     lastNicknameChange: Date.now()
@@ -252,12 +286,7 @@
                                 ) : (
                                     <div className="space-y-4">
                                         <p className="text-xs text-gray-400">30일에 한 번만 변경할 수 있습니다.</p>
-                                        <input 
-                                            value={input} 
-                                            onChange={e => setInput(e.target.value)} 
-                                            className="w-full bg-gray-700 p-2 rounded text-white border border-gray-600 focus:border-blue-500 outline-none"
-                                            placeholder="새 닉네임"
-                                        />
+                                        <input value={input} onChange={e => setInput(e.target.value)} className="w-full bg-gray-700 p-2 rounded text-white border border-gray-600 focus:border-blue-500 outline-none" placeholder="새 닉네임"/>
                                         {error && <p className="text-red-500 text-xs">{error}</p>}
                                         <div className="flex gap-2 justify-end">
                                             <button onClick={onClose} className="px-4 py-2 text-gray-400 hover:text-white">취소</button>
@@ -284,6 +313,9 @@
                 return () => unsub();
             }, []);
             const handleJoin = async (room) => {
+                // 중도 입장 차단
+                if (room.status === 'playing') { alert("이미 게임이 진행 중인 방입니다."); return; }
+                
                 if (room.password) {
                     const pw = prompt("비밀번호를 입력하세요:");
                     if (pw !== room.password) { alert("비밀번호가 틀렸습니다."); return; }
@@ -301,12 +333,8 @@
                             </button>
                             {showProfile && (
                                 <div className="absolute right-0 mt-2 w-40 bg-gray-700 rounded shadow-xl overflow-hidden z-50 border border-gray-600">
-                                    <button onClick={() => { setShowNickChange(true); setShowProfile(false); }} className="w-full text-left p-3 hover:bg-gray-600 text-white border-b border-gray-600 flex items-center gap-2">
-                                        <i className="ph ph-pencil-simple"></i> 닉네임 변경
-                                    </button>
-                                    <button onClick={() => signOut(auth)} className="w-full text-left p-3 hover:bg-gray-600 text-red-300 flex items-center gap-2">
-                                        <i className="ph ph-sign-out"></i> 로그아웃
-                                    </button>
+                                    <button onClick={() => { setShowNickChange(true); setShowProfile(false); }} className="w-full text-left p-3 hover:bg-gray-600 text-white border-b border-gray-600 flex items-center gap-2"><i className="ph ph-pencil-simple"></i> 닉네임 변경</button>
+                                    <button onClick={() => signOut(auth)} className="w-full text-left p-3 hover:bg-gray-600 text-red-300 flex items-center gap-2"><i className="ph ph-sign-out"></i> 로그아웃</button>
                                 </div>
                             )}
                         </div>
@@ -318,7 +346,7 @@
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {rooms.map(room => (
-                                <div key={room.id} onClick={() => handleJoin(room)} className={`bg-gray-800 border ${room.password ? 'border-yellow-700' : 'border-gray-700'} hover:border-red-500 p-4 rounded-lg cursor-pointer transition relative overflow-hidden group`}>
+                                <div key={room.id} onClick={() => handleJoin(room)} className={`bg-gray-800 border ${room.password ? 'border-yellow-700' : 'border-gray-700'} hover:border-red-500 p-4 rounded-lg cursor-pointer transition relative overflow-hidden group ${room.status === 'playing' ? 'opacity-50 grayscale' : ''}`}>
                                     <div className="flex justify-between items-start mb-2">
                                         <h3 className="font-bold text-lg truncate w-4/5">{room.title}</h3>
                                         {room.password ? <i className="ph ph-lock-key text-yellow-500 text-xl"></i> : <i className="ph ph-lock-key-open text-green-500 text-xl"></i>}
@@ -458,13 +486,26 @@
                 setChatMsg('');
             };
 
+            const handleSkipVote = async () => {
+                const me = room.players.find(p => p.uid === user.uid);
+                if(!me.isAlive) return;
+                if (room.gameState.voteList?.day?.[me.uid]) { alert("이미 투표했습니다."); return; }
+                if(!confirm("투표를 건너뛰시겠습니까?")) return;
+                
+                // Use 'SKIP' as the target ID for skipping
+                await updateDoc(doc(db, 'rooms', roomId), { [`gameState.voteList.day.${me.uid}`]: 'SKIP' });
+            };
+
             if (!room) return <div>Loading room...</div>;
             const me = room.players.find(p => p.uid === user.uid) || {};
             const isNight = room.gameState.phase.startsWith('night_') || room.gameState.phase === PHASES.NIGHT_INTRO;
             
             return (
-                <div className={`flex flex-col h-screen ${isNight ? 'bg-black text-gray-300' : 'bg-gray-900 text-white'} transition-colors duration-1000`}>
-                    <div className="p-3 border-b border-gray-700 flex justify-between items-center bg-opacity-50 bg-gray-800">
+                <div className={`flex flex-col h-screen ${isNight ? 'bg-black text-gray-300' : 'bg-gray-900 text-white'} transition-colors duration-1000 relative`}>
+                    {/* Night Atmosphere Effect */}
+                    {isNight && <div className="night-overlay"></div>}
+                    
+                    <div className="p-3 border-b border-gray-700 flex justify-between items-center bg-opacity-50 bg-gray-800 z-10">
                         <div className="flex items-center gap-4">
                             <button onClick={() => { if(confirm("정말 나가시겠습니까?")) onLeave(); }} className="text-gray-400 hover:text-white"><i className="ph ph-sign-out text-2xl"></i></button>
                             <h2 className="font-bold text-lg">{room.title} <span className="text-sm font-normal ml-2 text-gray-400">({room.players.length}/{room.settings.maxPlayers})</span></h2>
@@ -477,22 +518,33 @@
                                   {room.gameState.phase === PHASES.NIGHT_MAFIA && <span className="block text-sm text-red-500">마피아 턴</span>}
                                   {room.gameState.phase === PHASES.NIGHT_POLICE && <span className="block text-sm text-blue-500">경찰 턴</span>}
                                   {room.gameState.phase === PHASES.NIGHT_DOCTOR && <span className="block text-sm text-green-500">의사 턴</span>}
+                                  {room.gameState.phase === PHASES.DAY_VOTE_TALLY && <span className="block text-sm text-yellow-500 font-bold">투표 집계 중...</span>}
                               </div>
                              }
                         </div>
                         <div><span className={`font-bold px-2 py-1 rounded ${me.role === ROLES.MAFIA ? 'bg-red-900 text-red-200' : 'bg-gray-700'}`}>내 역할: {me.role || '?'}</span></div>
                     </div>
-                    <div className="flex-1 flex overflow-hidden">
+                    <div className="flex-1 flex overflow-hidden z-10">
                         <div className="flex-1 p-4 overflow-y-auto relative">
-                            <GameNotification phase={room.gameState.phase} logs={room.gameState.logs} lastExecuted={room.gameState.lastExecuted} isHost={me.isHost} room={room} roomId={roomId} />
+                            <GameNotification phase={room.gameState.phase} logs={room.gameState.logs} lastExecuted={room.gameState.lastExecuted} isHost={me.isHost} room={room} roomId={roomId} voteList={room.gameState.voteList} players={room.players} />
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-4xl mx-auto mt-8">
                                 {room.players.map(player => <PlayerCard key={player.uid} player={player} me={me} room={room} roomId={roomId} />)}
                             </div>
+                            
+                            {/* Skip Vote Button */}
+                            {room.gameState.phase === PHASES.DAY_VOTE && me.isAlive && !room.gameState.voteList?.day?.[me.uid] && (
+                                <div className="absolute bottom-4 right-4 animate-fade-in">
+                                    <button onClick={handleSkipVote} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-full shadow-lg flex items-center gap-2">
+                                        <i className="ph ph-fast-forward"></i> 투표 건너뛰기
+                                    </button>
+                                </div>
+                            )}
+
                             {room.status === 'waiting' && <WaitingRoomControls room={room} me={me} roomId={roomId} />}
                             {me.isHost && <HostLogic room={room} roomId={roomId} />}
                         </div>
                     </div>
-                    <div className="h-1/3 bg-gray-800 border-t border-gray-700 flex flex-col">
+                    <div className="h-1/3 bg-gray-800 border-t border-gray-700 flex flex-col z-10">
                         <div className="flex-1 overflow-y-auto p-4 space-y-2">
                             {chatLogs.map((msg, i) => <div key={i} className="text-sm"><span className="font-bold text-gray-400">{msg.sender}:</span> <span className="text-gray-200">{msg.text}</span></div>)}
                             <div ref={chatEndRef}></div>
@@ -510,17 +562,19 @@
             const [showVoteBtn, setShowVoteBtn] = useState(false);
             const [showKickBtn, setShowKickBtn] = useState(false);
             const hasVoted = room.gameState.voteList?.day?.[me.uid];
-            const isRainbowNick = player.nickname === 'Admin' || player.nickname === '김치볶음밥' || player.nickname === '이윤우담당일진';
+            
+            // Special Nicknames Logic
+            const isRainbow = ['Admin', '참치덮밥', '이윤우담당일진'].includes(player.nickname);
+            const isOcean = player.nickname === '지카 킬러';
+            const isShiny = ['Admin', '참치덮밥', '이윤우담당일진'].includes(player.nickname);
             
             const isTeammate = me.role === player.role && !isMe && me.role !== ROLES.CITIZEN && me.role;
 
             const handleClick = () => {
-                // HOST KICK LOGIC (Waiting Room)
                 if (room.status === 'waiting' && me.isHost && !player.isHost && !isMe) {
                      setShowKickBtn(!showKickBtn);
                      return;
                 }
-
                 if(isDead || !me.isAlive) return;
                 if (isMe && !(me.role === ROLES.DOCTOR && room.gameState.phase === PHASES.NIGHT_DOCTOR)) return;
 
@@ -575,23 +629,28 @@
                 if (room.gameState.phase === PHASES.NIGHT_DOCTOR && me.role === ROLES.DOCTOR) canAct = true; 
             }
 
+            // Nickname Class Logic
+            let nickClass = "font-bold";
+            if (isRainbow) nickClass = "rainbow-text text-xl";
+            else if (isOcean) nickClass = "ocean-blue-text text-xl";
+
             return (
                 <div onClick={handleClick} className={`
                     relative p-4 rounded-lg border-2 flex flex-col items-center gap-2 cursor-pointer transition transform hover:scale-105
                     ${isDead ? 'border-gray-800 opacity-50 grayscale' : 'border-gray-600 bg-gray-800'}
                     ${canAct ? 'border-red-500 ring-2 ring-red-500 animate-pulse' : ''}
                     ${isMe ? 'ring-2 ring-blue-500 border-blue-500' : ''}
+                    ${isShiny ? 'shiny-border' : ''}
                 `}>
                     {isDead && <i className="ph ph-skull text-4xl text-gray-500 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10"></i>}
                     <div className="w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center text-xl font-bold">{player.nickname[0]}</div>
-                    <span className={`truncate w-full text-center ${isRainbowNick ? 'rainbow-text text-xl' : 'font-bold'}`}>{player.nickname}</span>
+                    <span className={`truncate w-full text-center ${nickClass}`}>{player.nickname}</span>
                     {player.isHost && <span className="text-xs bg-yellow-600 px-2 py-0.5 rounded">방장</span>}
                     {(isMe || room.gameState.phase === PHASES.GAME_OVER) && <span className="text-xs text-gray-400">{player.role}</span>}
                     
                     {isTeammate && <span className="text-xs bg-indigo-600 text-white px-2 py-0.5 rounded animate-pulse">동료</span>}
                     {room.status === 'waiting' && player.isReady && <span className="absolute -top-3 px-3 py-1 text-xs font-bold bg-green-600 text-white rounded-full shadow-lg border border-green-400 animate-fade-in">준비 완료!</span>}
                     
-                    {/* KICK BUTTON (Host Only, Waiting Room) */}
                     {showKickBtn && room.status === 'waiting' && (
                         <div className="absolute inset-0 bg-black/80 flex items-center justify-center rounded-lg z-20 animate-fade-in">
                             <button onClick={handleKick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full shadow-lg">강퇴하기</button>
@@ -634,8 +693,9 @@
             );
         }
 
-        function GameNotification({ phase, logs, lastExecuted, isHost, room, roomId }) {
+        function GameNotification({ phase, logs, lastExecuted, isHost, room, roomId, voteList, players }) {
             const [showResult, setShowResult] = useState(false);
+            
             useEffect(() => {
                 if (phase === PHASES.DAY_RESULT) {
                     setShowResult(false);
@@ -645,6 +705,7 @@
                     setShowResult(false);
                 }
             }, [phase]);
+
             const handleResetGame = async () => {
                 if (!confirm("모든 플레이어를 대기실로 이동시키겠습니까?")) return;
                 const newPlayers = room.players.map(p => ({ ...p, isAlive: true, role: null, isReady: false }));
@@ -655,20 +716,44 @@
                     lastHealedId: null
                 });
             };
+
+            // Vote Tally Display
+            if (phase === PHASES.DAY_VOTE_TALLY) {
+                const votes = Object.values(voteList?.day || {});
+                const voteCounts = votes.reduce((acc, uid) => { acc[uid] = (acc[uid] || 0) + 1; return acc; }, {});
+                return (
+                    <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-8 text-center animate-fade-in">
+                        <h2 className="text-4xl font-bold text-yellow-400 mb-6">투표 집계 중...</h2>
+                        <div className="bg-gray-800 p-6 rounded-lg w-full max-w-md space-y-2">
+                            {Object.entries(voteCounts).map(([uid, count]) => {
+                                const targetName = uid === 'SKIP' ? "건너뛰기" : players.find(p => p.uid === uid)?.nickname || "알수없음";
+                                return (
+                                    <div key={uid} className="flex justify-between text-xl border-b border-gray-700 pb-2">
+                                        <span>{targetName}</span>
+                                        <span className="font-bold text-yellow-400">{count}표</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            }
+
             if (phase === PHASES.ROLE_REVEAL) return <OverlayMsg text="직업이 배정되었습니다." sub="당신의 역할을 확인하세요." />;
             if (phase === PHASES.NIGHT_INTRO) return <OverlayMsg text="밤이 되었습니다." sub="곧 직업 활동이 시작됩니다..." />;
             if (phase === PHASES.NIGHT_MAFIA || phase === PHASES.NIGHT_POLICE || phase === PHASES.NIGHT_DOCTOR) return null;
+
             if (phase === PHASES.DAY_INTRO) {
                 const lastLog = logs[logs.length - 1] || {};
                 return (
                     <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-8 text-center animate-fade-in">
                         <h2 className="text-4xl font-bold text-yellow-400 mb-6">아침이 되었습니다</h2>
                         <div className="bg-gray-800 p-6 rounded-lg border border-gray-600 w-full max-w-lg text-left space-y-4">
-                            <p>🔪 <span className="text-red-400">마피아 처형:</span> {lastLog.mafiaKill || "없음"}</p>
-                            <p>💉 <span className="text-green-400">의사 치료:</span> {lastLog.doctorSave || "없음"}</p>
-                            <p>👮 <span className="text-blue-400">경찰 조사:</span> {lastLog.policeInvest === ROLES.MAFIA ? "마피아" : lastLog.policeInvest === ROLES.POLICE ? "경찰" : lastLog.policeInvest === ROLES.DOCTOR ? "의사" : lastLog.policeInvest === ROLES.CITIZEN ? "시민" : "조사 안함"}</p>
+                            <p>🔪 <span className="text-red-400">마피아 처형:</span> {lastLog.mafiaKill}</p>
+                            <p>💉 <span className="text-green-400">의사 치료:</span> {lastLog.doctorSave}</p>
+                            <p>👮 <span className="text-blue-400">경찰 조사:</span> {lastLog.policeInvest}</p>
                             <hr className="border-gray-600"/>
-                            <p className="text-xl font-bold text-white">💀 사망자: {lastLog.dead || "없음"}</p>
+                            <p className="text-xl font-bold text-white">💀 사망자: {lastLog.dead}</p>
                         </div>
                     </div>
                 );
@@ -696,6 +781,7 @@
             }
             if (phase === PHASES.GAME_OVER) {
                 const lastLog = logs[logs.length - 1] || {};
+                // Wait 3 seconds before showing game over to allow result reading? No, logic handles transition.
                 return (
                     <div className="absolute inset-0 bg-black/80 z-50 flex flex-col items-center justify-center animate-fade-in pointer-events-auto">
                         <h1 className="text-5xl font-black text-white mb-4 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
@@ -737,42 +823,63 @@
                     else if (gs.phase === PHASES.NIGHT_INTRO && now >= gs.phaseEndTime) {
                         updates = { 'gameState.phase': PHASES.NIGHT_MAFIA, 'gameState.phaseEndTime': now + 10000, 'gameState.voteList': { mafia: {}, doctor: {}, police: {} } };
                     } 
-                    else if (gs.phase === PHASES.NIGHT_MAFIA && now >= gs.phaseEndTime) {
-                        updates = { 'gameState.phase': PHASES.NIGHT_POLICE, 'gameState.phaseEndTime': now + 10000 };
-                    }
-                    else if (gs.phase === PHASES.NIGHT_POLICE && now >= gs.phaseEndTime) {
-                        updates = { 'gameState.phase': PHASES.NIGHT_DOCTOR, 'gameState.phaseEndTime': now + 10000 };
-                    }
-                    else if (gs.phase === PHASES.NIGHT_DOCTOR && now >= gs.phaseEndTime) {
-                        const votes = gs.voteList || {};
-                        const mafiaTargets = Object.values(votes.mafia || {});
-                        const doctorTargets = Object.values(votes.doctor || {});
-                        const policeTargets = Object.values(votes.police || {});
-                        const alivePlayers = room.players.filter(p=>p.isAlive);
-                        
-                        const mafiaTarget = getNightActionTarget(mafiaTargets, alivePlayers.filter(p=>p.role !== ROLES.MAFIA).map(p=>p.uid));
-                        let doctorTarget = getNightActionTarget(doctorTargets, alivePlayers.map(p=>p.uid));
-                        
-                        let finalDoctorTarget = doctorTarget;
-                        if (doctorTarget && doctorTarget === room.lastHealedId) finalDoctorTarget = null;
-                        
-                        const policeTarget = getNightActionTarget(policeTargets, alivePlayers.map(p=>p.uid)); 
-                        let deadId = (mafiaTarget && mafiaTarget !== finalDoctorTarget) ? mafiaTarget : null;
-                        
-                        const newPlayers = room.players.map(p => p.uid === deadId ? { ...p, isAlive: false } : p);
-                        const winResult = checkWin(newPlayers);
-
-                        if(winResult) {
-                             await updateDoc(doc(db, 'rooms', roomId), { players: newPlayers, 'gameState.phase': PHASES.GAME_OVER, 'gameState.logs': arrayUnion({ winner: winResult, dead: getNick(room, deadId) }) }); return;
+                    else if (gs.phase === PHASES.NIGHT_MAFIA) {
+                        const aliveCount = room.players.filter(p => p.isAlive && p.role === ROLES.MAFIA).length;
+                        const voteCount = Object.keys(gs.voteList?.mafia || {}).length;
+                        if (now >= gs.phaseEndTime || (aliveCount > 0 && voteCount >= aliveCount)) {
+                            updates = { 'gameState.phase': PHASES.NIGHT_POLICE, 'gameState.phaseEndTime': now + 10000 };
                         }
-                        updates = {
-                            players: newPlayers, lastHealedId: finalDoctorTarget || null,
-                            'gameState.phase': PHASES.DAY_INTRO, 'gameState.phaseEndTime': now + 10000,
-                            'gameState.logs': arrayUnion({
-                                mafiaKill: getNick(room, mafiaTarget), doctorSave: getNick(room, finalDoctorTarget),
-                                policeInvest: policeTarget ? (room.players.find(p=>p.uid === policeTarget)?.role) : "비공개", dead: getNick(room, deadId)
-                            })
-                        };
+                    }
+                    else if (gs.phase === PHASES.NIGHT_POLICE) {
+                        const aliveCount = room.players.filter(p => p.isAlive && p.role === ROLES.POLICE).length;
+                        const voteCount = Object.keys(gs.voteList?.police || {}).length;
+                        if (now >= gs.phaseEndTime || voteCount >= aliveCount) {
+                            updates = { 'gameState.phase': PHASES.NIGHT_DOCTOR, 'gameState.phaseEndTime': now + 10000 };
+                        }
+                    }
+                    else if (gs.phase === PHASES.NIGHT_DOCTOR) {
+                        const aliveCount = room.players.filter(p => p.isAlive && p.role === ROLES.DOCTOR).length;
+                        const voteCount = Object.keys(gs.voteList?.doctor || {}).length;
+                        
+                        if (now >= gs.phaseEndTime || voteCount >= aliveCount) {
+                            const votes = gs.voteList || {};
+                            const mafiaTargets = Object.values(votes.mafia || {});
+                            const doctorTargets = Object.values(votes.doctor || {});
+                            const policeTargets = Object.values(votes.police || {});
+                            const alivePlayers = room.players.filter(p=>p.isAlive);
+                            
+                            const mafiaTarget = getNightActionTarget(mafiaTargets, alivePlayers.filter(p=>p.role !== ROLES.MAFIA).map(p=>p.uid));
+                            let doctorTarget = getNightActionTarget(doctorTargets, alivePlayers.map(p=>p.uid));
+                            
+                            let finalDoctorTarget = doctorTarget;
+                            if (doctorTarget && doctorTarget === room.lastHealedId) finalDoctorTarget = null;
+                            
+                            const policeTarget = getNightActionTarget(policeTargets, alivePlayers.map(p=>p.uid)); 
+                            let deadId = (mafiaTarget && mafiaTarget !== finalDoctorTarget) ? mafiaTarget : null;
+                            
+                            const newPlayers = room.players.map(p => p.uid === deadId ? { ...p, isAlive: false } : p);
+                            const winResult = checkWin(newPlayers);
+
+                            if(winResult) {
+                                await updateDoc(doc(db, 'rooms', roomId), { 
+                                    players: newPlayers, 
+                                    'gameState.phase': PHASES.GAME_OVER, 
+                                    'gameState.logs': arrayUnion({ winner: winResult, dead: getNick(room, deadId) }) 
+                                }); 
+                                return;
+                            }
+
+                            updates = {
+                                players: newPlayers, lastHealedId: finalDoctorTarget || null,
+                                'gameState.phase': PHASES.DAY_INTRO, 'gameState.phaseEndTime': now + 10000,
+                                'gameState.logs': arrayUnion({
+                                    mafiaKill: mafiaTarget ? getNick(room, mafiaTarget) : "지정 안함", 
+                                    doctorSave: finalDoctorTarget ? getNick(room, finalDoctorTarget) : "지정 안함",
+                                    policeInvest: policeTarget ? (room.players.find(p=>p.uid === policeTarget)?.role) : "지정 안함", 
+                                    dead: getNick(room, deadId)
+                                })
+                            };
+                        }
                     } 
                     else if (gs.phase === PHASES.DAY_INTRO && now >= gs.phaseEndTime) {
                         updates = { 'gameState.phase': PHASES.DAY_VOTE, 'gameState.phaseEndTime': now + (180 * 1000), 'gameState.voteList.day': {} };
@@ -781,22 +888,43 @@
                         const aliveCount = room.players.filter(p => p.isAlive).length;
                         const voteCount = Object.keys(gs.voteList?.day || {}).length;
                         if (now >= gs.phaseEndTime || voteCount >= aliveCount) {
-                            const votes = Object.values(gs.voteList?.day || {});
-                            const voteCounts = votes.reduce((acc, uid) => { acc[uid] = (acc[uid] || 0) + 1; return acc; }, {});
-                            let executeId = null, maxV = -1, tied = false;
-                            Object.entries(voteCounts).forEach(([uid, count]) => {
-                                if (count > maxV) { maxV = count; executeId = uid; tied = false; } else if (count === maxV) { tied = true; }
-                            });
-                            if (tied) executeId = null;
-                            let newPlayers = room.players;
-                            if (executeId) newPlayers = room.players.map(p => p.uid === executeId ? { ...p, isAlive: false } : p);
-                            const winResult = checkWin(newPlayers);
-                            if(winResult) {
-                                await updateDoc(doc(db, 'rooms', roomId), { players: newPlayers, 'gameState.phase': PHASES.GAME_OVER, 'gameState.logs': arrayUnion({ winner: winResult, dead: getNick(room, executeId) }) }); return;
-                            }
+                             updates = { 'gameState.phase': PHASES.DAY_VOTE_TALLY, 'gameState.phaseEndTime': now + 3000 }; // 3s Tally
+                        }
+                    }
+                    else if (gs.phase === PHASES.DAY_VOTE_TALLY && now >= gs.phaseEndTime) {
+                        // Process Votes
+                        const votes = Object.values(gs.voteList?.day || {});
+                        const voteCounts = votes.reduce((acc, uid) => { acc[uid] = (acc[uid] || 0) + 1; return acc; }, {});
+                        let executeId = null, maxV = -1, tied = false;
+                        Object.entries(voteCounts).forEach(([uid, count]) => {
+                            if (count > maxV) { maxV = count; executeId = uid; tied = false; } else if (count === maxV) { tied = true; }
+                        });
+                        if (tied || executeId === 'SKIP') executeId = null;
+
+                        let newPlayers = room.players;
+                        if (executeId) newPlayers = room.players.map(p => p.uid === executeId ? { ...p, isAlive: false } : p);
+                        
+                        const winResult = checkWin(newPlayers);
+                        
+                        // Even if win, we show Result first.
+                        let nextPhase = PHASES.DAY_RESULT;
+                        if (winResult) {
+                             // We add a special flag or handle it in logs to transition to GAME_OVER *after* DAY_RESULT
+                             // For simplicity in this structure, we can check win in DAY_RESULT transition logic.
+                             // Let's store the winner in a temp field or check it again next loop?
+                             // Better: Store `pendingWinner` in gameState
+                             updates = {
+                                players: newPlayers,
+                                'gameState.phase': nextPhase,
+                                'gameState.phaseEndTime': now + 10000, 
+                                'gameState.dayCount': increment(1),
+                                'gameState.lastExecuted': executeId ? { nick: getNick(room, executeId), role: room.players.find(p=>p.uid===executeId).role } : null,
+                                'gameState.pendingWinner': winResult // New field to track pending win
+                            };
+                        } else {
                             updates = {
                                 players: newPlayers,
-                                'gameState.phase': PHASES.DAY_RESULT,
+                                'gameState.phase': nextPhase,
                                 'gameState.phaseEndTime': now + 10000, 
                                 'gameState.dayCount': increment(1),
                                 'gameState.lastExecuted': executeId ? { nick: getNick(room, executeId), role: room.players.find(p=>p.uid===executeId).role } : null
@@ -804,7 +932,15 @@
                         }
                     } 
                     else if (gs.phase === PHASES.DAY_RESULT && now >= gs.phaseEndTime) {
-                        updates = { 'gameState.phase': PHASES.NIGHT_INTRO, 'gameState.phaseEndTime': now + 3000 };
+                        if (gs.pendingWinner) {
+                             updates = { 
+                                 'gameState.phase': PHASES.GAME_OVER, 
+                                 'gameState.logs': arrayUnion({ winner: gs.pendingWinner, dead: "Game End" }),
+                                 'gameState.pendingWinner': null // clear
+                             };
+                        } else {
+                             updates = { 'gameState.phase': PHASES.NIGHT_INTRO, 'gameState.phaseEndTime': now + 3000 };
+                        }
                     }
                     if (Object.keys(updates).length > 0) { await updateDoc(doc(db, 'rooms', roomId), updates); }
                 }, 1000);
