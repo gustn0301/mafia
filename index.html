@@ -54,6 +54,19 @@
             text-shadow: 0 0 5px rgba(0, 200, 255, 0.3);
         }
 
+        /* Gold Gradient Text for Braces */
+        .gold-text {
+            background: linear-gradient(to bottom, #FFD700, #FFA500, #FFD700);
+            background-size: 100% 200%;
+            animation: shine-gold 2s infinite linear;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: transparent;
+            font-weight: 900;
+            text-shadow: 0 0 2px rgba(255, 215, 0, 0.5);
+        }
+
         /* Updated Shiny Border: Runs only 3 times then stops */
         .shiny-border {
             border: 2px solid #FFD700 !important;
@@ -62,6 +75,7 @@
         }
 
         @keyframes rainbow-shift { to { background-position: -200% 0; } }
+        @keyframes shine-gold { to { background-position: 0 -200%; } }
         @keyframes pulse-gold {
             0% { box-shadow: 0 0 5px #FFD700; }
             50% { box-shadow: 0 0 20px #FFD700, 0 0 10px white; }
@@ -567,7 +581,8 @@
             // Special Nicknames Logic
             const isRainbow = ['Admin', '참치덮밥', '뷁'].includes(player.nickname);
             const isOcean = player.nickname === '지카 킬러';
-            const isShiny = ['Admin', '참치덮밥', '뷁'].includes(player.nickname);
+            const isShiny = ['Admin', '참치덮밥', '이윤우담당일진'].includes(player.nickname);
+            const isGoldBrace = ['Admin', '뷁'].includes(player.nickname); // New logic for braces
             
             const isTeammate = me.role === player.role && !isMe && me.role !== ROLES.CITIZEN && me.role;
 
@@ -645,7 +660,14 @@
                 `}>
                     {isDead && <i className="ph ph-skull text-4xl text-gray-500 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10"></i>}
                     <div className="w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center text-xl font-bold">{player.nickname[0]}</div>
-                    <span className={`truncate w-full text-center ${nickClass}`}>{player.nickname}</span>
+                    
+                    {/* Nickname Display with possible Braces */}
+                    <span className={`truncate w-full text-center flex items-center justify-center gap-1`}>
+                        {isGoldBrace && <span className="gold-text text-xl">{'{'}</span>}
+                        <span className={nickClass}>{player.nickname}</span>
+                        {isGoldBrace && <span className="gold-text text-xl">{'}'}</span>}
+                    </span>
+                    
                     {player.isHost && <span className="text-xs bg-yellow-600 px-2 py-0.5 rounded">방장</span>}
                     {(isMe || room.gameState.phase === PHASES.GAME_OVER) && <span className="text-xs text-gray-400">{player.role}</span>}
                     
